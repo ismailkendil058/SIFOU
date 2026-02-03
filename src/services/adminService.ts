@@ -18,11 +18,16 @@ export interface Transaction {
 
 export const adminService = {
     // Workers
-    getWorkers: async (): Promise<Worker[]> => {
-        const { data, error } = await supabase
+    getWorkers: async (activeOnly: boolean = true): Promise<Worker[]> => {
+        let query = supabase
             .from('workers')
-            .select('*')
-            .order('name');
+            .select('*');
+
+        if (activeOnly) {
+            query = query.eq('is_active', true);
+        }
+
+        const { data, error } = await query.order('name');
 
         if (error) throw error;
 
@@ -35,13 +40,56 @@ export const adminService = {
     },
 
     addWorker: async (name: string, pin: string): Promise<Worker> => {
+        // First check if a worker with this PIN already exists (even if inactive)
+        const { data: existing, error: checkError } = await supabase
+            .from('workers')
+            .select('*')
+            .eq('pin', pin)
+            .maybeSingle();
+
+        if (checkError) throw checkError;
+
+        if (existing) {
+            if (existing.is_active) {
+                // Already active, this is a real conflict
+                const err = new Error(`PIN ${pin} is already assigned to ${existing.name}`);
+                (err as any).code = 'ALREADY_EXISTS';
+                throw err;
+            } else {
+                // Exists but inactive - Reactivate and update name
+                const { data: reactivated, error: reactivateError } = await supabase
+                    .from('workers')
+                    .update({ name, is_active: true })
+                    .eq('id', existing.id)
+                    .select()
+                    .single();
+
+                if (reactivateError) throw reactivateError;
+
+                return {
+                    id: reactivated.id,
+                    name: reactivated.name,
+                    password: reactivated.pin,
+                    is_active: reactivated.is_active
+                };
+            }
+        }
+
+        // No existing found, proceed with normal insert
         const { data, error } = await supabase
             .from('workers')
             .insert({ name, pin, is_active: true })
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            if (error.code === '23505') { // Unique violation
+                const err = new Error("This PIN is already in use.");
+                (err as any).code = 'ALREADY_EXISTS';
+                throw err;
+            }
+            throw error;
+        }
 
         return {
             id: data.id,
@@ -75,12 +123,27 @@ export const adminService = {
     },
 
     deleteWorker: async (id: string): Promise<void> => {
+        // Try to delete first
         const { error } = await supabase
             .from('workers')
             .delete()
             .eq('id', id);
 
-        if (error) throw error;
+        if (error) {
+            // Check if error is due to foreign key constraint (Conflict 409)
+            // Postgres error code 23503 is foreign_key_violation
+            if (error.code === '23503' || (error as any).status === 409) {
+                // Deactivate instead
+                const { error: updateError } = await supabase
+                    .from('workers')
+                    .update({ is_active: false })
+                    .eq('id', id);
+
+                if (updateError) throw updateError;
+                return;
+            }
+            throw error;
+        }
     },
 
     // Finances
@@ -214,7 +277,7 @@ export const adminService = {
             .reduce((acc, t) => acc + t.amount, 0);
 
         const workerEarnings: Record<string, number> = {};
-        const workers = await adminService.getWorkers();
+        const workers = await adminService.getWorkers(false); // Include inactive for stats initialization
         workers.forEach(w => workerEarnings[w.id] = 0);
 
         filtered.filter(t => (t.type === 'income' || t.type === 'manual') && t.workerId).forEach(t => {
@@ -246,5 +309,42 @@ export const adminService = {
         const totalOutflow = charges?.reduce((sum, c) => sum + (Number(c.amount) || 0), 0) || 0;
 
         return totalIncome - totalOutflow;
+    },
+
+    getDailyRevenueBreakdown: async (): Promise<any[]> => {
+        const { data: sales, error } = await supabase
+            .from('sales')
+            .select(`
+                total_amount,
+                created_at,
+                worker_id,
+                worker_name
+            `)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Group by Date
+        const grouped = (sales || []).reduce((acc: any, sale) => {
+            const date = sale.created_at.split('T')[0];
+            if (!acc[date]) {
+                acc[date] = {
+                    date,
+                    total: 0,
+                    workers: {}
+                };
+            }
+            acc[date].total += sale.total_amount;
+
+            const wName = sale.worker_name || 'Generic';
+            if (!acc[date].workers[wName]) {
+                acc[date].workers[wName] = 0;
+            }
+            acc[date].workers[wName] += sale.total_amount;
+
+            return acc;
+        }, {});
+
+        return Object.values(grouped);
     }
 };

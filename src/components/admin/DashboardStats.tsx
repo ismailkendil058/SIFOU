@@ -33,7 +33,7 @@ export const DashboardStats = () => {
             const data = await adminService.getStats(filter, sDate, eDate);
             setStats(data);
 
-            const w = await adminService.getWorkers();
+            const w = await adminService.getWorkers(false);
             setWorkers(w);
         };
         fetchStats();

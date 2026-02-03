@@ -6,9 +6,10 @@ import { cn } from '@/lib/utils';
 
 interface PinEntryProps {
   onSuccess: () => void;
+  onBeforePinCheck?: () => Promise<void>;
 }
 
-export const PinEntry = ({ onSuccess }: PinEntryProps) => {
+export const PinEntry = ({ onSuccess, onBeforePinCheck }: PinEntryProps) => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -21,23 +22,31 @@ export const PinEntry = ({ onSuccess }: PinEntryProps) => {
       setError(false);
 
       if (newPin.length === 4) {
-        const worker = validatePin(newPin);
-        if (worker) {
-          setSuccess(true);
-          startSession(worker);
-          setTimeout(() => {
-            onSuccess();
-          }, 500);
-        } else {
-          setError(true);
-          setTimeout(() => {
-            setPin('');
-            setError(false);
-          }, 800);
-        }
+        const checkPin = async () => {
+          if (onBeforePinCheck) {
+            await onBeforePinCheck();
+          }
+
+          const worker = validatePin(newPin);
+          if (worker) {
+            setSuccess(true);
+            startSession(worker);
+            setTimeout(() => {
+              onSuccess();
+            }, 500);
+          } else {
+            setError(true);
+            setTimeout(() => {
+              setPin('');
+              setError(false);
+            }, 800);
+          }
+        };
+
+        checkPin();
       }
     }
-  }, [pin, validatePin, startSession, onSuccess]);
+  }, [pin, validatePin, startSession, onSuccess, onBeforePinCheck]);
 
   const handleDelete = useCallback(() => {
     setPin((prev) => prev.slice(0, -1));
@@ -55,7 +64,7 @@ export const PinEntry = ({ onSuccess }: PinEntryProps) => {
       <div className="absolute inset-0 barca-diagonal pointer-events-none" />
       <div className="absolute top-0 left-0 w-32 h-32 bg-gradient-primary opacity-10 blur-3xl rounded-full" />
       <div className="absolute bottom-0 right-0 w-40 h-40 bg-gradient-accent opacity-10 blur-3xl rounded-full" />
-      
+
       {/* Logo */}
       <div className="mb-8 text-center animate-fade-up relative">
         <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-primary shadow-glow-primary flex items-center justify-center">
@@ -83,8 +92,8 @@ export const PinEntry = ({ onSuccess }: PinEntryProps) => {
                   ? success
                     ? "bg-success text-success-foreground shadow-md"
                     : error
-                    ? "bg-destructive text-destructive-foreground animate-[shake_0.3s_ease-in-out]"
-                    : "bg-primary text-primary-foreground shadow-md"
+                      ? "bg-destructive text-destructive-foreground animate-[shake_0.3s_ease-in-out]"
+                      : "bg-primary text-primary-foreground shadow-md"
                   : "bg-card border-2 border-border text-muted-foreground"
               )}
             >
@@ -105,7 +114,7 @@ export const PinEntry = ({ onSuccess }: PinEntryProps) => {
       </div>
 
       {/* Numpad */}
-      <div 
+      <div
         className="grid grid-cols-3 gap-3 w-full max-w-xs animate-fade-up"
         style={{ animationDelay: '0.2s' }}
       >
@@ -149,7 +158,7 @@ export const PinEntry = ({ onSuccess }: PinEntryProps) => {
       {/* Admin Link */}
       <div className="mt-12 animate-fade-up" style={{ animationDelay: '0.3s' }}>
         <a
-          href="/admin"
+          href="/admin/login"
           className="text-muted-foreground hover:text-primary text-sm font-medium flex items-center gap-2 transition-colors"
         >
           Admin Access

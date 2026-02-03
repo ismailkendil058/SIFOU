@@ -7,17 +7,20 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { adminService, Transaction, Worker } from '@/services/adminService';
-import { PlusCircle, Wallet, ArrowDownRight, ArrowUpRight, Banknote } from 'lucide-react';
+import { PlusCircle, Wallet, ArrowDownRight, ArrowUpRight, Banknote, Calendar, ChevronRight, User } from 'lucide-react';
 import { toast } from "sonner";
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 export const FinanceManager = () => {
+    const [dailyBreakdown, setDailyBreakdown] = useState<any[]>([]);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [pocketMoney, setPocketMoney] = useState(0);
     const [workers, setWorkers] = useState<Worker[]>([]);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [selectedDay, setSelectedDay] = useState<any | null>(null);
 
     // Form State
     const [amount, setAmount] = useState('');
@@ -26,12 +29,22 @@ export const FinanceManager = () => {
     const [selectedWorker, setSelectedWorker] = useState<string>('');
 
     const fetchData = async () => {
-        const txs = await adminService.getTransactions();
-        setTransactions(txs);
-        const money = await adminService.getPocketMoney();
-        setPocketMoney(money);
-        const w = await adminService.getWorkers();
-        setWorkers(w);
+        try {
+            const breakdown = await adminService.getDailyRevenueBreakdown();
+            setDailyBreakdown(breakdown);
+
+            const txs = await adminService.getTransactions();
+            // In the "Charges" tab, we only want expenses and salaries
+            setTransactions(txs.filter(t => t.type === 'expense' || t.type === 'salary'));
+
+            const money = await adminService.getPocketMoney();
+            setPocketMoney(money);
+
+            const w = await adminService.getWorkers(false);
+            setWorkers(w);
+        } catch (error) {
+            toast.error("Failed to load financial data");
+        }
     };
 
     useEffect(() => {
@@ -70,99 +83,209 @@ export const FinanceManager = () => {
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
+            {/* Header / Stats */}
             <div className="grid gap-6 md:grid-cols-2">
-                <Card className="md:col-span-2 bg-gradient-to-r from-slate-900 to-slate-800 text-white border-0 shadow-xl">
+                <Card className="md:col-span-2 bg-gradient-to-r from-slate-900 to-slate-800 text-white border-0 shadow-xl overflow-hidden relative">
+                    <div className="absolute top-0 right-0 p-8 opacity-10">
+                        <Wallet size={120} />
+                    </div>
                     <CardHeader>
-                        <CardTitle className="flex items-center text-slate-400">
+                        <CardTitle className="flex items-center text-slate-400 font-medium">
                             <Wallet className="mr-2 h-5 w-5" />
-                            Current Pocket Money
+                            Current Balance (Pocket)
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="text-5xl font-bold tracking-tighter">
                             DZD {pocketMoney.toLocaleString()}
                         </div>
-                        <p className="text-slate-400 mt-2">Available cash on hand</p>
+                        <p className="text-slate-400 mt-2 flex items-center">
+                            <Banknote className="mr-2 h-4 w-4" />
+                            Total cash available after all income & expenses
+                        </p>
                     </CardContent>
                 </Card>
             </div>
 
-            <div className="flex justify-between items-center mt-8">
-                <h3 className="text-xl font-semibold">Recent Transactions</h3>
-                <Button onClick={() => setIsDialogOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                    <PlusCircle className="mr-2 h-4 w-4" /> Add Transaction
-                </Button>
-            </div>
+            <Tabs defaultValue="revenue" className="w-full">
+                <div className="flex justify-between items-center mb-4">
+                    <TabsList className="bg-slate-100 p-1">
+                        <TabsTrigger value="revenue" className="data-[state=active]:bg-white">
+                            <Calendar className="mr-2 h-4 w-4" /> Daily Revenue
+                        </TabsTrigger>
+                        <TabsTrigger value="charges" className="data-[state=active]:bg-white">
+                            <ArrowUpRight className="mr-2 h-4 w-4" /> Expenses & Salaries
+                        </TabsTrigger>
+                    </TabsList>
 
-            <Card>
-                <CardContent className="p-0">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Date</TableHead>
-                                <TableHead>Description</TableHead>
-                                <TableHead>Type</TableHead>
-                                <TableHead className="text-right">Amount</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {transactions.map((tx) => (
-                                <TableRow key={tx.id}>
-                                    <TableCell className="text-muted-foreground w-[150px]">
-                                        {format(new Date(tx.date), 'MMM dd, HH:mm')}
-                                    </TableCell>
-                                    <TableCell className="font-medium">
-                                        {tx.description}
-                                        {tx.workerId && workers.find(w => w.id === tx.workerId) && (
-                                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                                {workers.find(w => w.id === tx.workerId)?.name}
-                                            </span>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        <BadgeType type={tx.type} />
-                                    </TableCell>
-                                    <TableCell className={cn(
-                                        "text-right font-bold w-[150px]",
-                                        (tx.type === 'income' || tx.type === 'manual') ? "text-emerald-600" : "text-red-600"
-                                    )}>
-                                        {(tx.type === 'income' || tx.type === 'manual') ? "+" : "-"} {tx.amount.toLocaleString()}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                            {transactions.length === 0 && (
-                                <TableRow>
-                                    <TableCell colSpan={4} className="text-center h-24 text-muted-foreground">
-                                        No transactions recorded.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
+                    <Button onClick={() => setIsDialogOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md">
+                        <PlusCircle className="mr-2 h-4 w-4" /> New Charge
+                    </Button>
+                </div>
+
+                <TabsContent value="revenue" className="mt-0">
+                    <Card border-0 shadow-sm>
+                        <CardHeader>
+                            <CardTitle className="text-lg">Revenue History</CardTitle>
+                            <CardDescription>Daily earnings grouped by worker. Click a row to see details.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-slate-50">
+                                        <TableHead className="font-semibold">Date</TableHead>
+                                        <TableHead className="font-semibold">Details</TableHead>
+                                        <TableHead className="text-right font-semibold">Total DZD</TableHead>
+                                        <TableHead className="w-[50px]"></TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {dailyBreakdown.map((day) => (
+                                        <React.Fragment key={day.date}>
+                                            <TableRow
+                                                className="cursor-pointer hover:bg-slate-50 transition-colors"
+                                                onClick={() => setSelectedDay(selectedDay === day.date ? null : day.date)}
+                                            >
+                                                <TableCell className="font-medium">
+                                                    {format(new Date(day.date), 'EEEE, MMM dd, yyyy')}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {Object.keys(day.workers).slice(0, 3).map(wName => (
+                                                            <span key={wName} className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700">
+                                                                {wName}
+                                                            </span>
+                                                        ))}
+                                                        {Object.keys(day.workers).length > 3 && (
+                                                            <span className="text-[11px] text-muted-foreground">+{Object.keys(day.workers).length - 3} more</span>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right font-bold text-emerald-600">
+                                                    {day.total.toLocaleString()}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <ChevronRight className={cn("h-4 w-4 text-slate-300 transition-transform", selectedDay === day.date && "rotate-90")} />
+                                                </TableCell>
+                                            </TableRow>
+                                            {selectedDay === day.date && (
+                                                <TableRow className="bg-slate-50/50">
+                                                    <TableCell colSpan={4} className="p-4">
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                                                            {Object.entries(day.workers).map(([name, amount]: [string, any]) => (
+                                                                <div key={name} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex justify-between items-center">
+                                                                    <div className="flex items-center">
+                                                                        <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 mr-3">
+                                                                            <User size={16} />
+                                                                        </div>
+                                                                        <span className="font-medium text-slate-700">{name}</span>
+                                                                    </div>
+                                                                    <span className="font-bold text-slate-900 border-l pl-3 ml-3">
+                                                                        DZD {amount.toLocaleString()}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </React.Fragment>
+                                    ))}
+                                    {dailyBreakdown.length === 0 && (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="text-center h-48 text-muted-foreground">
+                                                <div className="flex flex-col items-center justify-center opacity-50">
+                                                    <Calendar size={48} className="mb-2" />
+                                                    <p>No revenue records found yet.</p>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="charges">
+                    <Card border-0 shadow-sm>
+                        <CardHeader>
+                            <CardTitle className="text-lg">Expenses & Salary History</CardTitle>
+                            <CardDescription>Tracking money leaving the pocket.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-slate-50">
+                                        <TableHead className="font-semibold">Date</TableHead>
+                                        <TableHead className="font-semibold">Category</TableHead>
+                                        <TableHead className="font-semibold text-center">Reference</TableHead>
+                                        <TableHead className="text-right font-semibold">Amount (DZD)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {transactions.map((tx) => (
+                                        <TableRow key={tx.id}>
+                                            <TableCell className="text-muted-foreground w-[180px]">
+                                                {format(new Date(tx.date), 'MMM dd, HH:mm')}
+                                            </TableCell>
+                                            <TableCell className="font-medium">
+                                                <BadgeType type={tx.type} />
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex flex-col text-center">
+                                                    <span className="text-slate-700 font-medium">{tx.description}</span>
+                                                    {tx.workerId && (
+                                                        <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">
+                                                            {workers.find(w => w.id === tx.workerId)?.name || 'Former Worker'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-right font-bold text-red-600 w-[150px]">
+                                                - {tx.amount.toLocaleString()}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {transactions.length === 0 && (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="text-center h-48 text-muted-foreground">
+                                                <div className="flex flex-col items-center justify-center opacity-50">
+                                                    <ArrowUpRight size={48} className="mb-2" />
+                                                    <p>No charges recorded yet.</p>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent>
+                <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
-                        <DialogTitle>Add New Transaction</DialogTitle>
-                        <DialogDescription>Record a new financial entry.</DialogDescription>
+                        <DialogTitle>Add New Charge</DialogTitle>
+                        <DialogDescription>Record a new expense or salary payment.</DialogDescription>
                     </DialogHeader>
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                    <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+                        <div className="grid grid-cols-1 gap-4">
                             <div className="space-y-2">
-                                <Label>Transaction Type</Label>
+                                <Label>What type of charge?</Label>
                                 <Select value={type} onValueChange={(v: any) => setType(v)}>
-                                    <SelectTrigger>
+                                    <SelectTrigger className="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="expense">Expense</SelectItem>
+                                        <SelectItem value="expense">General Expense</SelectItem>
                                         <SelectItem value="salary">Worker Salary</SelectItem>
-                                        <SelectItem value="income">Deposit (Add Money)</SelectItem>
+                                        <SelectItem value="income">External Deposit (Inbound)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
+
                             <div className="space-y-2">
                                 <Label>Amount (DZD)</Label>
                                 <Input
@@ -170,19 +293,20 @@ export const FinanceManager = () => {
                                     placeholder="0.00"
                                     value={amount}
                                     onChange={(e) => setAmount(e.target.value)}
+                                    className="text-lg font-bold"
                                 />
                             </div>
                         </div>
 
                         {type === 'salary' && (
-                            <div className="space-y-2">
-                                <Label>Select Worker</Label>
+                            <div className="space-y-2 animate-in slide-in-from-top duration-200">
+                                <Label>Pay to Worker</Label>
                                 <Select value={selectedWorker} onValueChange={setSelectedWorker}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Choose a worker" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {workers.map(w => (
+                                        {workers.filter(w => w.is_active).map(w => (
                                             <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
                                         ))}
                                     </SelectContent>
@@ -191,18 +315,18 @@ export const FinanceManager = () => {
                         )}
 
                         <div className="space-y-2">
-                            <Label>Description</Label>
+                            <Label>Description / Note</Label>
                             <Input
-                                placeholder={type === 'salary' ? "Salary payment for October" : "e.g. Bought supplies"}
+                                placeholder={type === 'salary' ? "e.g. Weekly salary" : "e.g. Bought more coffee"}
                                 value={desc}
                                 onChange={(e) => setDesc(e.target.value)}
                             />
                         </div>
 
-                        <DialogFooter>
+                        <DialogFooter className="pt-4">
                             <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
                             <Button type="submit" className={type === 'income' ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"}>
-                                {type === 'income' ? 'Add Deposit' : 'Add Charge'}
+                                {type === 'income' ? 'Confirm Deposit' : 'Confirm Charge'}
                             </Button>
                         </DialogFooter>
                     </form>

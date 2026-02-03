@@ -61,8 +61,8 @@ export const WorkersManager = () => {
             setEditingWorker(null);
             setFormData({ name: '', password: '' });
             fetchWorkers();
-        } catch (error) {
-            toast.error("An error occurred");
+        } catch (error: any) {
+            toast.error(error.message || "An error occurred");
         }
     };
 

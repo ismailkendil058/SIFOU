@@ -162,14 +162,28 @@ export const useGameStore = create<GameStore>()(
           set({ isLoading: true, error: null });
           const { data, error } = await supabase.from('posts').select('*');
           if (error) throw error;
-          const posts: GamingPost[] = data.map(p => ({
-            id: p.id,
-            name: p.name,
-            type: p.type,
-            points: p.points,
-            isActive: p.is_active,
-            startTime: p.start_time ? new Date(p.start_time) : null,
-          }));
+
+          const postLayout: Record<string, { name: string, order: number }> = {
+            'ps4-1': { name: 'PS4 – 3', order: 1 }, // Top Left
+            'ps4-4': { name: 'PS4 – 5', order: 2 }, // Top Right
+            'ps4-2': { name: 'PS4 – 2', order: 3 }, // Middle Left
+            'ps4-5': { name: 'PS4 – 6', order: 4 }, // Bottom Right
+            'ps4-3': { name: 'PS4 – 1', order: 5 }, // Bottom Left
+            'ps5-1': { name: 'PS5', order: 0 }
+          };
+
+          const posts: GamingPost[] = (data || [])
+            .map(p => ({
+              id: p.id,
+              name: postLayout[p.id]?.name || p.name,
+              type: p.type,
+              points: p.points,
+              isActive: p.is_active,
+              startTime: p.start_time ? new Date(p.start_time) : null,
+              sortOrder: postLayout[p.id]?.order ?? 99
+            }))
+            .sort((a, b) => (a as any).sortOrder - (b as any).sortOrder);
+
           set({ posts });
         } catch (error) {
           set({ error: error instanceof Error ? error.message : 'Failed to load posts' });
@@ -222,7 +236,19 @@ export const useGameStore = create<GameStore>()(
         try {
           set({ isLoading: true, error: null });
           const { error } = await supabase.from('workers').delete().eq('id', id);
-          if (error) throw error;
+
+          if (error) {
+            if (error.code === '23503' || (error as any).status === 409) {
+              const { error: updateError } = await supabase
+                .from('workers')
+                .update({ is_active: false })
+                .eq('id', id);
+              if (updateError) throw updateError;
+            } else {
+              throw error;
+            }
+          }
+
           const { workers } = get();
           set({ workers: workers.filter(w => w.id !== id) });
         } catch (error) {
@@ -238,7 +264,7 @@ export const useGameStore = create<GameStore>()(
       loadWorkers: async () => {
         try {
           set({ isLoading: true, error: null });
-          const { data, error } = await supabase.from('workers').select('*');
+          const { data, error } = await supabase.from('workers').select('*').eq('is_active', true);
           if (error) throw error;
           const workers: Worker[] = data.map(w => ({
             id: w.id,
