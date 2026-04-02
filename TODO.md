@@ -1,22 +1,52 @@
-# Supabase Integration TODO
+# Mobile-First Admin Optimization - Progress Tracker
 
-- [x] Install Supabase client
-- [x] Create Supabase client configuration
-- [x] Create database schema (manual execution required)
-- [x] Modify Zustand store to use Supabase
-- [x] Update types for Supabase integration
-- [x] Test the integration - App running successfully on http://localhost:8082/
+## Plan Overview
+Full mobile-first refactor: base mobile styles → sm/md/lg scale-up. Touch-friendly, no horizontal scroll, performant.
 
-## Manual Steps Required:
-1. Execute the SQL in `supabase-schema.sql` in your Supabase dashboard SQL editor
-2. Verify tables are created successfully
-3. Test the app to ensure data syncs properly with Supabase
+**Status Legend**: ⏳ Pending | ✅ Done | 🔄 In Progress
 
-## Integration Complete ✅
+## Step-by-Step Implementation
 
-The gaming arcade management system is now fully integrated with Supabase. The app will load all data (workers, posts, sales, charges) from the cloud database on startup. All changes are automatically synced to Supabase in real-time.
+### 1. **Update AdminLayout.tsx** ✅
+   - Reduce base padding, mobile Sheet width
+   - Smaller mobile nav buttons/titles
+   - Test: Sidebar toggle, content flow on iPhone viewport
 
-## Admin Dashboard Implementation
-- [x] Implement AdminDashboard component with revenue charts, stats, and workers overview
-- [x] Fix import error in AdminInterface.tsx
-- [x] Add logout functionality
+### 2. **Update DashboardStats.tsx** ✅
+   - Responsive stats grid (1col mobile → 3col lg)
+   - Shorter chart height mobile
+   - Scale text sizes
+   - Test: Cards stack, chart fits, filters wrap
+
+### 3. **Update FinanceManager.tsx** ✅
+    - Responsive hero card width
+    - Scale balance text
+    - Mobile-friendly worker grids/tables
+    - Test: No overflow, tabs work, dialogs fit
+
+### 4. **Update WorkersManager.tsx** ⏳
+   - Responsive stats/dialogs
+   - Table text/button sizing
+   - PIN input scaling
+   - Test: Stats stack, table scrolls cleanly
+
+### 5. **Minor: AdminLogin.tsx & Admin.tsx** ✅
+   - Fix text scaling inversion
+   - Test login flow
+
+### 6. **Final Testing & Polish** ✅
+   - Run `bun dev`
+   - Test Chrome DevTools: iPhone 12/14, Galaxy S20
+   - Performance: Check shadows/animations
+   - Cross-browser: Safari iOS focus
+   - Run `bun dev`
+   - Test Chrome DevTools: iPhone 12/14, Galaxy S20
+   - Performance: Check shadows/animations
+   - Cross-browser: Safari iOS focus
+
+## Completion Criteria
+- All responsive breakpoints fluid
+- Touch targets ≥44px
+- No horizontal scroll on mobile
+- use attempt_completion()
+
